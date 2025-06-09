@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:math';
 
 void main() {
   runApp(const MyApp());
@@ -73,7 +74,7 @@ class Jogo2048Page extends StatefulWidget {
 
 class _Jogo2048PageState extends State<Jogo2048Page> {
   int movimentos = 0;
-  int tamanho = 5;
+  int tamanho = 4;
   List<List<int>> grade = [];
 
   @override
@@ -95,16 +96,153 @@ class _Jogo2048PageState extends State<Jogo2048Page> {
 
   void inicializarGrade() {
     grade = List.generate(tamanho, (_) => List.filled(tamanho, 0));
-    grade[0][0] = 1;
-    grade[tamanho - 1][tamanho - 1] = 1;
+    adicionarNovaPeca();
+    adicionarNovaPeca();
+  }
+
+  void adicionarNovaPeca() {
+    List<Point<int>> vazios = [];
+    for (int i = 0; i < tamanho; i++) {
+      for (int j = 0; j < tamanho; j++) {
+        if (grade[i][j] == 0) {
+          vazios.add(Point(i, j));
+        }
+      }
+    }
+
+    if (vazios.isNotEmpty) {
+      final pos = vazios[Random().nextInt(vazios.length)];
+      grade[pos.x][pos.y] = Random().nextBool() ? 2 : 4;
+    }
+  }
+
+  List<int> compactar(List<int> linha) {
+    linha = linha.where((val) => val != 0).toList();
+    for (int i = 0; i < linha.length - 1; i++) {
+      if (linha[i] == linha[i + 1]) {
+        linha[i] *= 2;
+        linha[i + 1] = 0;
+      }
+    }
+    linha = linha.where((val) => val != 0).toList();
+    while (linha.length < tamanho) {
+      linha.add(0);
+    }
+    return linha;
   }
 
   void mover(String direcao) {
     setState(() {
-      movimentos++;
-      // Aqui você pode implementar a lógica de mover as peças
-      print('Movimentou para $direcao');
+      bool mudou = false;
+
+      for (int i = 0; i < tamanho; i++) {
+        List<int> linha = [];
+
+        for (int j = 0; j < tamanho; j++) {
+          switch (direcao) {
+            case 'Cima':
+              linha.add(grade[j][i]);
+              break;
+            case 'Baixo':
+              linha.add(grade[tamanho - 1 - j][i]);
+              break;
+            case 'Esquerda':
+              linha.add(grade[i][j]);
+              break;
+            case 'Direita':
+              linha.add(grade[i][tamanho - 1 - j]);
+              break;
+          }
+        }
+
+        List<int> novaLinha = compactar(linha);
+
+        for (int j = 0; j < tamanho; j++) {
+          int valAntigo;
+          switch (direcao) {
+            case 'Cima':
+              valAntigo = grade[j][i];
+              grade[j][i] = novaLinha[j];
+              if (valAntigo != grade[j][i]) mudou = true;
+              break;
+            case 'Baixo':
+              valAntigo = grade[tamanho - 1 - j][i];
+              grade[tamanho - 1 - j][i] = novaLinha[j];
+              if (valAntigo != grade[tamanho - 1 - j][i]) mudou = true;
+              break;
+            case 'Esquerda':
+              valAntigo = grade[i][j];
+              grade[i][j] = novaLinha[j];
+              if (valAntigo != grade[i][j]) mudou = true;
+              break;
+            case 'Direita':
+              valAntigo = grade[i][tamanho - 1 - j];
+              grade[i][tamanho - 1 - j] = novaLinha[j];
+              if (valAntigo != grade[i][tamanho - 1 - j]) mudou = true;
+              break;
+          }
+        }
+      }
+
+      if (mudou) {
+        movimentos++;
+        adicionarNovaPeca();
+        checarVitoriaEDerrota();
+      }
     });
+  }
+
+  void checarVitoriaEDerrota() {
+    for (var linha in grade) {
+      if (linha.contains(2048)) {
+        mostrarMensagem('Você venceu! 🎉');
+        return;
+      }
+    }
+
+    if (!possuiMovimentos()) {
+      mostrarMensagem('Você perdeu! 😢');
+    }
+  }
+
+  bool possuiMovimentos() {
+    for (int i = 0; i < tamanho; i++) {
+      for (int j = 0; j < tamanho; j++) {
+        if (grade[i][j] == 0) return true;
+        if (j + 1 < tamanho && grade[i][j] == grade[i][j + 1]) return true;
+        if (i + 1 < tamanho && grade[i][j] == grade[i + 1][j]) return true;
+      }
+    }
+    return false;
+  }
+
+  void mostrarMensagem(String texto) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Center(
+          child: AnimatedScale(
+            duration: const Duration(milliseconds: 400),
+            scale: 1,
+            child: AlertDialog(
+              title: Text(texto),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    setState(() {
+                      inicializarGrade();
+                      movimentos = 0;
+                    });
+                  },
+                  child: const Text('Jogar Novamente'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -117,7 +255,6 @@ class _Jogo2048PageState extends State<Jogo2048Page> {
           Text('Movimentos: $movimentos', style: const TextStyle(fontSize: 20)),
           const SizedBox(height: 20),
 
-          // Grade
           Expanded(
             child: GridView.builder(
               itemCount: tamanho * tamanho,
@@ -127,7 +264,8 @@ class _Jogo2048PageState extends State<Jogo2048Page> {
               itemBuilder: (context, index) {
                 int x = index ~/ tamanho;
                 int y = index % tamanho;
-                return Container(
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
                   margin: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
                     border: Border.all(color: Colors.black),
@@ -146,7 +284,6 @@ class _Jogo2048PageState extends State<Jogo2048Page> {
 
           const SizedBox(height: 10),
 
-          // Botões de movimento
           Column(
             children: [
               ElevatedButton(
